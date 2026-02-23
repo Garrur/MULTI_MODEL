@@ -6,13 +6,16 @@ routes/vision_routes.py - Vision API endpoints:
 """
 import asyncio
 import base64
+import json
+import os
+import tempfile
 import time
 import uuid
 from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from PIL import Image
 from loguru import logger
@@ -149,6 +152,151 @@ async def process_frame_upload(
         run_reid=run_reid,
     )
     return await process_frame(req, db, pipeline, graph)
+
+
+# ── POST /analyze-video ──────────────────────────────────────────────────────
+
+@router.post("/analyze-video", summary="Upload a video file and stream per-frame detection results via SSE")
+async def analyze_video(
+    camera_id: str = Form("VIDEO-UPLOAD"),
+    frame_interval: int = Form(5),
+    run_attributes: bool = Form(True),
+    run_reid: bool = Form(True),
+    video: UploadFile = File(...),
+    pipeline=Depends(get_pipeline),
+):
+    """
+    Upload a video file. Frames are sampled every `frame_interval` frames.
+    Results are streamed back as Server-Sent Events (SSE).
+
+    SSE event format:
+      data: {"type": "frame",   "frame_id": int, "timestamp_sec": float, ...}
+      data: {"type": "summary", "total_frames": int, "unique_persons": int, ...}
+      data: {"type": "error",   "message": str}
+    """
+    # Read video bytes into a temp file (cv2 needs a real path on Windows)
+    content = await video.read()
+    suffix = os.path.splitext(video.filename or ".mp4")[1] or ".mp4"
+
+    async def event_stream():
+        tmp_path = None
+        try:
+            import cv2
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+
+            cap = cv2.VideoCapture(tmp_path)
+            if not cap.isOpened():
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Cannot open video file'})}\n\n"
+                return
+
+            fps_native  = cap.get(cv2.CAP_PROP_FPS) or 25.0
+            total_raw   = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            total_sampled = max(1, total_raw // max(1, frame_interval))
+
+            # Metadata handshake
+            yield f"data: {json.dumps({'type': 'meta', 'total_sampled': total_sampled, 'fps_native': fps_native, 'total_frames_raw': total_raw})}\n\n"
+
+            raw_idx        = 0
+            processed_idx  = 0
+            unique_ids     = set()
+            peak_count     = 0
+            t_video_start  = time.time()
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                if raw_idx % max(1, frame_interval) == 0:
+                    # Convert BGR → RGB → PIL
+                    import numpy as np
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_img = Image.fromarray(rgb)
+                    timestamp_sec = round(raw_idx / fps_native, 3)
+
+                    try:
+                        result = pipeline.process_frame(
+                            image_input=pil_img,
+                            camera_id=camera_id,
+                            run_attributes=run_attributes,
+                            run_reid=run_reid,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Frame {raw_idx} error: {e}")
+                        raw_idx += 1
+                        continue
+
+                    persons = result.get("persons", [])
+                    for p in persons:
+                        pid = p.get("assigned_person_id")
+                        if pid:
+                            unique_ids.add(pid)
+                    peak_count = max(peak_count, len(persons))
+
+                    # Slim down persons payload for SSE
+                    slim_persons = [
+                        {
+                            "track_id":   p.get("track_id"),
+                            "bbox":       p.get("bbox"),
+                            "score":      round(p.get("score", 0), 3),
+                            "is_new":     p.get("is_new_person", False),
+                            "attributes": p.get("attributes", {}),
+                            "reid_sim":   round(p["reid_matches"][0]["similarity"], 3)
+                                          if p.get("reid_matches") else None,
+                        }
+                        for p in persons
+                    ]
+
+                    event = {
+                        "type":          "frame",
+                        "frame_id":      processed_idx,
+                        "raw_frame":     raw_idx,
+                        "timestamp_sec": timestamp_sec,
+                        "person_count":  len(persons),
+                        "persons":       slim_persons,
+                        "latency_ms":    round(result["latency"]["total_ms"], 1),
+                        "progress":      round((processed_idx + 1) / total_sampled * 100, 1),
+                    }
+                    yield f"data: {json.dumps(event)}\n\n"
+                    processed_idx += 1
+
+                    # Yield control so FastAPI can flush the buffer
+                    await asyncio.sleep(0)
+
+                raw_idx += 1
+
+            cap.release()
+            duration_sec = round(time.time() - t_video_start, 2)
+
+            summary = {
+                "type":             "summary",
+                "total_frames_processed": processed_idx,
+                "unique_person_count":     len(unique_ids),
+                "peak_person_count":       peak_count,
+                "duration_sec":            duration_sec,
+                "video_duration_sec":      round(total_raw / fps_native, 2),
+            }
+            yield f"data: {json.dumps(summary)}\n\n"
+            logger.info(f"Video analysis done — {processed_idx} frames, {len(unique_ids)} unique persons")
+
+        except Exception as e:
+            logger.error(f"analyze_video error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":      "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection":         "keep-alive",
+        },
+    )
 
 
 # ── GET /cameras ──────────────────────────────────────────────────────────────
