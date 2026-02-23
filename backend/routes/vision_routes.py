@@ -21,9 +21,9 @@ from PIL import Image
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.session import get_db
+from database.session import get_db, AsyncSessionLocal
 from database import crud
-from database.models import ActivityType
+from database.models import ActivityType, AnalysisSession
 
 router = APIRouter(prefix="/api/v1", tags=["Vision"])
 
@@ -176,7 +176,13 @@ async def analyze_video(
     """
     # Read video bytes into a temp file (cv2 needs a real path on Windows)
     content = await video.read()
-    suffix = os.path.splitext(video.filename or ".mp4")[1] or ".mp4"
+    filename = video.filename or "uploaded_video.mp4"
+    suffix = os.path.splitext(filename)[1] or ".mp4"
+    
+    # Pre-generate an ID and path for the thumbnail
+    session_id = uuid.uuid4()
+    thumb_filename = f"{session_id}.jpg"
+    thumb_path = os.path.join("static", "thumbnails", thumb_filename)
 
     async def event_stream():
         tmp_path = None
@@ -214,6 +220,11 @@ async def analyze_video(
                     import numpy as np
                     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     pil_img = Image.fromarray(rgb)
+                    
+                    # Save the very first processed frame as the session thumbnail
+                    if processed_idx == 0:
+                        pil_img.save(thumb_path, "JPEG", quality=85)
+
                     timestamp_sec = round(raw_idx / fps_native, 3)
 
                     try:
@@ -280,6 +291,24 @@ async def analyze_video(
             }
             yield f"data: {json.dumps(summary)}\n\n"
             logger.info(f"Video analysis done — {processed_idx} frames, {len(unique_ids)} unique persons")
+            
+            # Save the session to the database
+            try:
+                # We need a fresh session here inside the generator
+                async with AsyncSessionLocal() as db:
+                    new_session = AnalysisSession(
+                        id=session_id,
+                        video_filename=filename,
+                        thumbnail_path=f"/static/thumbnails/{thumb_filename}",
+                        duration_sec=duration_sec,
+                        frames_processed=processed_idx,
+                        unique_persons=len(unique_ids),
+                        peak_count=peak_count,
+                    )
+                    db.add(new_session)
+                    await db.commit()
+            except Exception as e:
+                logger.error(f"Failed to save session to DB: {e}")
 
         except Exception as e:
             logger.error(f"analyze_video error: {e}")
@@ -297,6 +326,30 @@ async def analyze_video(
             "Connection":         "keep-alive",
         },
     )
+
+
+# ── GET /sessions ─────────────────────────────────────────────────────────────
+
+@router.get("/sessions", summary="List historical video analysis sessions")
+async def list_sessions(db: AsyncSession = Depends(get_db)):
+    from sqlalchemy.future import select
+    query = select(AnalysisSession).order_by(AnalysisSession.timestamp.desc())
+    result = await db.execute(query)
+    sessions = result.scalars().all()
+    
+    return [
+        {
+            "id": str(s.id),
+            "timestamp": s.timestamp.isoformat(),
+            "video_filename": s.video_filename,
+            "thumbnail_path": s.thumbnail_path,
+            "duration_sec": s.duration_sec,
+            "frames_processed": s.frames_processed,
+            "unique_persons": s.unique_persons,
+            "peak_count": s.peak_count,
+        }
+        for s in sessions
+    ]
 
 
 # ── GET /cameras ──────────────────────────────────────────────────────────────

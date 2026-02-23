@@ -10,8 +10,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 import psutil
+import os
 
 from config import settings, DEVICE
 
@@ -136,6 +138,13 @@ from routes.nlp_routes import router as nlp_router
 
 app.include_router(vision_router)
 app.include_router(nlp_router)
+
+# ── Static Files ───────────────────────────────────────────────────────────────
+
+# Create static directory if it doesn't exist
+os.makedirs("static/thumbnails", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # ── Health & Status Routes ─────────────────────────────────────────────────────
 

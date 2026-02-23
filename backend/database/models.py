@@ -21,6 +21,24 @@ class ActivityType(str, enum.Enum):
     TRESPASSING = "trespassing"
 
 
+class AnalysisSession(Base):
+    __tablename__ = "analysis_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    video_filename = Column(String(255), nullable=False)
+    thumbnail_path = Column(String(500), nullable=True)
+    
+    # Analysis Summary Stats
+    duration_sec = Column(Float, nullable=False, default=0.0)
+    frames_processed = Column(Integer, nullable=False, default=0)
+    unique_persons = Column(Integer, nullable=False, default=0)
+    peak_count = Column(Integer, nullable=False, default=0)
+
+    def __repr__(self):
+        return f"<AnalysisSession id={self.id} video={self.video_filename}>"
+
+
 class Person(Base):
     __tablename__ = "persons"
 

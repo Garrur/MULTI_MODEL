@@ -60,8 +60,14 @@ export default function UploadPage() {
   const [summary, setSummary] = useState<SummaryEvent | null>(null);
   const [errMsg, setErrMsg] = useState("");
 
+  // Timeline & Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentTime, setCurrentTime] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
   const logRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // ── Drag & drop ──────────────────────────────────────────────────────────────
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -106,10 +112,19 @@ export default function UploadPage() {
             if (ev.type === "frame") {
               const fe = ev as FrameEvent;
               setProgress(fe.progress);
-              setFrames(prev => [fe, ...prev].slice(0, 200)); // keep last 200
-              setTimeout(() => logRef.current?.scrollTo({ top: 0, behavior: "smooth" }), 0);
+              setFrames(prev => [...prev, fe]); // Accumulate all frames for timeline
+              setTimeout(() => {
+                if (state !== "done" && logRef.current) {
+                  logRef.current.scrollTop = logRef.current.scrollHeight;
+                }
+              }, 0);
             }
-            if (ev.type === "summary") { setSummary(ev as SummaryEvent); setState("done"); setProgress(100); }
+            if (ev.type === "summary") {
+              setSummary(ev as SummaryEvent);
+              setState("done");
+              setProgress(100);
+              if (file) setVideoUrl(URL.createObjectURL(file));
+            }
             if (ev.type === "error")   { setErrMsg(ev.message); setState("error"); }
           } catch { /* ignore malformed */ }
         }
@@ -121,7 +136,44 @@ export default function UploadPage() {
     }
   };
 
-  const reset = () => { setFile(null); setState("idle"); setProgress(0); setMeta(null); setFrames([]); setSummary(null); setErrMsg(""); };
+  const reset = () => {
+    setFile(null); setState("idle"); setProgress(0); setMeta(null);
+    setFrames([]); setSummary(null); setErrMsg(""); setSearchQuery("");
+    if (videoUrl) { URL.revokeObjectURL(videoUrl); setVideoUrl(null); }
+  };
+
+  // ── Timeline logic ──────────────────────────────────────────────────────────
+  const matchedFrames = frames.filter(f => {
+    if (!searchQuery.trim()) return false;
+    const q = searchQuery.toLowerCase();
+    return f.persons.some(p => {
+      if (`trk-${p.track_id}`.includes(q)) return true;
+      const attrs = p.attributes || {};
+      if (attrs.gender?.toLowerCase().includes(q)) return true;
+      if (attrs.color?.toLowerCase().includes(q)) return true;
+      if (attrs.age_group?.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  });
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+  };
+  const seekTo = (sec: number) => {
+    if (videoRef.current) videoRef.current.currentTime = sec;
+  };
+
+  // Sync log scroll with video
+  const logEntriesToRender = state === "done" ? frames : [...frames].slice(0, 200).reverse();
+  if (state === "done" && videoRef.current && logRef.current) {
+    const activeIdx = frames.findIndex(f => f.timestamp_sec >= currentTime);
+    if (activeIdx >= 0) {
+      const el = logRef.current.children[activeIdx] as HTMLElement;
+      if (el) {
+        logRef.current.scrollTo({ top: el.offsetTop - logRef.current.offsetTop - 50, behavior: "smooth" });
+      }
+    }
+  }
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -146,50 +198,119 @@ export default function UploadPage() {
         {/* ── LEFT: controls ─────────────────────────────────────────────── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 
-          {/* Drop zone */}
-          <div
-            className="holo-panel holo-corners"
-            onDragOver={e => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            onClick={() => !file && fileInputRef.current?.click()}
-            style={{
-              padding: "2rem 1.5rem",
-              textAlign: "center",
-              cursor: file ? "default" : "pointer",
-              border: dragging ? "1px solid var(--cyan)" : file ? "1px solid rgba(0,238,255,0.35)" : "1px dashed rgba(0,238,255,0.25)",
-              boxShadow: dragging ? "var(--glow-cyan)" : undefined,
-              transition: "all 0.3s",
-              minHeight: 160,
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem",
-            }}
-          >
-            <input ref={fileInputRef} type="file" accept="video/*" style={{ display: "none" }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); }} />
+          {/* Drop zone OR Video Player */}
+          {state === "done" && videoUrl ? (
+            <div className="holo-panel holo-corners" style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", background: "#000" }}>
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  controls
+                  onTimeUpdate={handleTimeUpdate}
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                />
+              </div>
 
-            {file ? (
-              <>
-                <div style={{ width: 40, height: 40, border: "1px solid var(--cyan)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ color: "var(--cyan)", fontSize: "1.2rem" }}>▶</span>
+              {/* Forensic Timeline Scrubber */}
+              <div>
+                <input
+                  type="text"
+                  placeholder="FORENSIC SEARCH (e.g. 'TRK-2', 'red', 'female')..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="holo-input"
+                  style={{ width: "100%", fontSize: "0.8rem", marginBottom: "0.75rem", padding: "0.6rem 1rem", border: "1px solid var(--cyan)", background: "rgba(0,229,255,0.05)" }}
+                />
+                
+                <div style={{ position: "relative", height: 24, background: "rgba(255,255,255,0.05)", borderRadius: 2, cursor: searchQuery ? "pointer" : "default" }}>
+                  {/* Markers */}
+                  {summary && meta && matchedFrames.map((f, i) => {
+                    const pct = (f.timestamp_sec / summary.video_duration_sec) * 100;
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => seekTo(f.timestamp_sec)}
+                        style={{
+                          position: "absolute",
+                          left: `${pct}%`,
+                          top: 0,
+                          width: 2,
+                          height: "100%",
+                          background: "var(--alert-red)",
+                          boxShadow: "0 0 8px var(--alert-red)",
+                          cursor: "pointer",
+                          zIndex: 10,
+                        }}
+                        title={`Match at ${fmtSec(f.timestamp_sec)}`}
+                      />
+                    );
+                  })}
+                  {/* Playhead */}
+                  {summary && (
+                    <div style={{
+                      position: "absolute",
+                      left: `${(currentTime / summary.video_duration_sec) * 100}%`,
+                      top: -4, bottom: -4, width: 2,
+                      background: "var(--cyan)",
+                      boxShadow: "var(--glow-cyan)",
+                      zIndex: 20,
+                      pointerEvents: "none",
+                      transition: "left 0.1s linear"
+                    }} />
+                  )}
+                  {(!searchQuery || matchedFrames.length === 0) && (
+                    <div className="font-mono" style={{ position: "absolute", width: "100%", textAlign: "center", top: 5, fontSize: "0.55rem", color: "var(--text-dim)", pointerEvents: "none" }}>
+                      {searchQuery ? "NO_MATCHES_FOUND" : "ENTER_QUERY_TO_REVEAL_TIMELINE_MARKERS"}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <div className="font-mono" style={{ color: "var(--text-primary)", fontSize: "0.8rem", wordBreak: "break-all" }}>{file.name}</div>
-                  <div className="font-mono" style={{ color: "var(--text-dim)", fontSize: "0.62rem", marginTop: "0.25rem" }}>
-                    {(file.size / 1e6).toFixed(1)} MB
+              </div>
+            </div>
+          ) : (
+            <div
+              className="holo-panel holo-corners"
+              onDragOver={e => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              onClick={() => !file && fileInputRef.current?.click()}
+              style={{
+                padding: "2rem 1.5rem",
+                textAlign: "center",
+                cursor: file ? "default" : "pointer",
+                border: dragging ? "1px solid var(--cyan)" : file ? "1px solid rgba(0,238,255,0.35)" : "1px dashed rgba(0,238,255,0.25)",
+                boxShadow: dragging ? "var(--glow-cyan)" : undefined,
+                transition: "all 0.3s",
+                minHeight: 160,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem",
+              }}
+            >
+              <input ref={fileInputRef} type="file" accept="video/*" style={{ display: "none" }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f); }} />
+
+              {file ? (
+                <>
+                  <div style={{ width: 40, height: 40, border: "1px solid var(--cyan)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ color: "var(--cyan)", fontSize: "1.2rem" }}>▶</span>
                   </div>
-                </div>
-                <button onClick={e => { e.stopPropagation(); setFile(null); }} className="holo-btn holo-btn-danger" style={{ fontSize: "0.6rem", padding: "0.3rem 0.9rem" }}>REMOVE</button>
-              </>
-            ) : (
-              <>
-                <div style={{ opacity: dragging ? 1 : 0.4, transition: "opacity 0.3s", fontSize: "2rem", color: "var(--cyan)" }}>⬆</div>
-                <div className="font-mono" style={{ fontSize: "0.7rem", color: "var(--text-dim)", letterSpacing: "0.1em" }}>
-                  DRAG_VIDEO_HERE<br />
-                  <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>.mp4 .avi .mov .mkv</span>
-                </div>
-              </>
-            )}
-          </div>
+                  <div>
+                    <div className="font-mono" style={{ color: "var(--text-primary)", fontSize: "0.8rem", wordBreak: "break-all" }}>{file.name}</div>
+                    <div className="font-mono" style={{ color: "var(--text-dim)", fontSize: "0.62rem", marginTop: "0.25rem" }}>
+                      {(file.size / 1e6).toFixed(1)} MB
+                    </div>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); setFile(null); }} className="holo-btn holo-btn-danger" style={{ fontSize: "0.6rem", padding: "0.3rem 0.9rem" }}>REMOVE</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ opacity: dragging ? 1 : 0.4, transition: "opacity 0.3s", fontSize: "2rem", color: "var(--cyan)" }}>⬆</div>
+                  <div className="font-mono" style={{ fontSize: "0.7rem", color: "var(--text-dim)", letterSpacing: "0.1em" }}>
+                    DRAG_VIDEO_HERE<br />
+                    <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>.mp4 .avi .mov .mkv</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Config panel */}
           <div className="holo-panel" style={{ padding: "1rem" }}>
@@ -317,34 +438,41 @@ export default function UploadPage() {
           {frames.length > 0 && (
             <div className="holo-panel" style={{ padding: "1rem" }}>
               <div className="holo-heading" style={{ marginBottom: "0.75rem" }}>Frame Log</div>
-              <div ref={logRef} style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                {frames.map((f, i) => (
-                  <div key={`${f.frame_id}-${i}`} style={{
-                    display: "grid", gridTemplateColumns: "60px 60px 40px 1fr",
-                    gap: "0.5rem", alignItems: "center",
-                    padding: "0.4rem 0.6rem",
-                    background: i === 0 ? "rgba(0,229,255,0.04)" : "transparent",
-                    borderBottom: "1px solid rgba(0,229,255,0.05)",
-                    animation: i === 0 ? "float-up 0.3s ease both" : "none",
-                  }}>
-                    <span className="font-mono" style={{ fontSize: "0.62rem", color: "var(--text-dim)" }}>F#{f.frame_id}</span>
-                    <span className="font-mono" style={{ fontSize: "0.62rem", color: "var(--text-dim)" }}>{fmtSec(f.timestamp_sec)}</span>
-                    <span className="font-mono" style={{ fontSize: "0.7rem", color: f.person_count > 0 ? "var(--cyan)" : "var(--text-dim)", fontWeight: 700 }}>×{f.person_count}</span>
-                    <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                      {f.persons.map(p => {
-                        const col = p.reid_sim && p.reid_sim > 0.85 ? "var(--alert-red)" : p.is_new ? "var(--alert-amber)" : "var(--cyan)";
-                        return (
-                          <span key={p.track_id} className="holo-chip" style={{ color: col, borderColor: col, fontSize: "0.52rem" }}>
-                            TRK-{p.track_id}
-                            {p.attributes?.gender ? ` ${p.attributes.gender}` : ""}
-                            {p.reid_sim ? ` ${(p.reid_sim * 100).toFixed(0)}%` : ""}
-                          </span>
-                        );
-                      })}
-                      <span className="font-mono" style={{ fontSize: "0.55rem", color: "var(--text-dim)", alignSelf: "center" }}>{f.latency_ms}ms</span>
+              <div ref={logRef} style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.35rem", position: "relative" }}>
+                {logEntriesToRender.map((f, i) => {
+                  const isActive = state === "done" && Math.abs(f.timestamp_sec - currentTime) < 0.5;
+                  const isMatch = state === "done" && !!searchQuery && matchedFrames.includes(f);
+                  
+                  return (
+                    <div key={`${f.frame_id}-${i}`} style={{
+                      display: "grid", gridTemplateColumns: "60px 60px 40px 1fr",
+                      gap: "0.5rem", alignItems: "center",
+                      padding: "0.4rem 0.6rem",
+                      background: isActive ? "rgba(0,229,255,0.15)" : isMatch ? "rgba(255,0,0,0.1)" : i === 0 && state !== "done" ? "rgba(0,229,255,0.04)" : "transparent",
+                      borderBottom: "1px solid rgba(0,229,255,0.05)",
+                      borderLeft: isActive ? "2px solid var(--cyan)" : isMatch ? "2px solid var(--alert-red)" : "2px solid transparent",
+                      animation: i === 0 && state !== "done" ? "float-up 0.3s ease both" : "none",
+                      transition: "all 0.2s"
+                    }}>
+                      <span className="font-mono" style={{ fontSize: "0.62rem", color: "var(--text-dim)" }}>F#{f.frame_id}</span>
+                      <span className="font-mono" style={{ fontSize: "0.62rem", color: "var(--text-dim)" }}>{fmtSec(f.timestamp_sec)}</span>
+                      <span className="font-mono" style={{ fontSize: "0.7rem", color: f.person_count > 0 ? "var(--cyan)" : "var(--text-dim)", fontWeight: 700 }}>×{f.person_count}</span>
+                      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                        {f.persons.map(p => {
+                          const col = p.reid_sim && p.reid_sim > 0.85 ? "var(--alert-red)" : p.is_new ? "var(--alert-amber)" : "var(--cyan)";
+                          return (
+                            <span key={p.track_id} className="holo-chip" style={{ color: col, borderColor: col, fontSize: "0.52rem" }}>
+                              TRK-{p.track_id}
+                              {p.attributes?.gender ? ` ${p.attributes.gender}` : ""}
+                              {p.reid_sim ? ` ${(p.reid_sim * 100).toFixed(0)}%` : ""}
+                            </span>
+                          );
+                        })}
+                        <span className="font-mono" style={{ fontSize: "0.55rem", color: "var(--text-dim)", alignSelf: "center" }}>{f.latency_ms}ms</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
