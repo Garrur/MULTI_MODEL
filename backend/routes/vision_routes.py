@@ -1,0 +1,220 @@
+"""
+routes/vision_routes.py - Vision API endpoints:
+  POST /process-frame  (single frame inference)
+  GET  /live-feed      (WebSocket stream)
+  GET  /cameras        (list active cameras)
+"""
+import asyncio
+import base64
+import time
+import uuid
+from io import BytesIO
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from PIL import Image
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.session import get_db
+from database import crud
+from database.models import ActivityType
+
+router = APIRouter(prefix="/api/v1", tags=["Vision"])
+
+
+# ── Request / Response Models ─────────────────────────────────────────────────
+
+class FrameProcessRequest(BaseModel):
+    camera_id: str
+    image_b64: str              # base64-encoded JPEG/PNG
+    run_attributes: bool = True
+    run_reid: bool = True
+    reid_threshold: float = 0.85
+
+
+class FrameProcessResponse(BaseModel):
+    camera_id: str
+    frame_id: int
+    person_count: int
+    persons: list
+    latency: dict
+    fps: float
+    timestamp: float
+
+
+# ── Dependency: get vision pipeline singleton ──────────────────────────────────
+
+def get_pipeline():
+    from app import vision_pipeline
+    return vision_pipeline
+
+
+def get_movement_graph():
+    from app import movement_graph
+    return movement_graph
+
+
+# ── POST /process-frame ───────────────────────────────────────────────────────
+
+@router.post("/process-frame", response_model=FrameProcessResponse, summary="Process a single camera frame")
+async def process_frame(
+    request: FrameProcessRequest,
+    db: AsyncSession = Depends(get_db),
+    pipeline=Depends(get_pipeline),
+    graph=Depends(get_movement_graph),
+):
+    """
+    Submit a single camera frame for full vision pipeline processing.
+    Returns detected persons with tracking IDs, ReID matches, and attributes.
+    """
+    try:
+        result = pipeline.process_frame(
+            image_input=request.image_b64,
+            camera_id=request.camera_id,
+            run_attributes=request.run_attributes,
+            run_reid=request.run_reid,
+            reid_threshold=request.reid_threshold,
+        )
+    except Exception as e:
+        logger.error(f"Vision pipeline error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Persist events to database
+    for person in result.get("persons", []):
+        person_id_str = person.get("assigned_person_id")
+        if not person_id_str:
+            continue
+        try:
+            person_uuid = uuid.UUID(person_id_str)
+        except ValueError:
+            continue
+
+        # Upsert person record
+        db_person = await crud.get_person(db, person_uuid)
+        if db_person is None and person.get("is_new_person"):
+            db_person = await crud.create_person(
+                db,
+                faiss_id=person.get("faiss_id"),
+                attributes=person.get("attributes"),
+            )
+
+        if db_person:
+            await crud.update_person_last_seen(db, db_person.id)
+            await crud.create_event(
+                db,
+                person_id=db_person.id,
+                camera_id=request.camera_id,
+                activity_type=ActivityType.DETECTED,
+                bounding_box={"x1": person["bbox"][0], "y1": person["bbox"][1],
+                               "x2": person["bbox"][2], "y2": person["bbox"][3]},
+                confidence=person.get("score"),
+                track_id=person.get("track_id"),
+                raw_metadata={"reid_matches": person.get("reid_matches", [])},
+            )
+
+            # Update movement graph
+            graph.add_observation(
+                person_id=str(db_person.id),
+                camera_id=request.camera_id,
+                timestamp=result["timestamp"],
+            )
+
+    return JSONResponse(content=result)
+
+
+# ── POST /process-frame/upload (multipart form data) ─────────────────────────
+
+@router.post("/process-frame/upload", summary="Upload image file for processing")
+async def process_frame_upload(
+    camera_id: str = Form(...),
+    run_attributes: bool = Form(True),
+    run_reid: bool = Form(True),
+    image: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    pipeline=Depends(get_pipeline),
+    graph=Depends(get_movement_graph),
+):
+    """Submit a frame via multipart file upload."""
+    content = await image.read()
+    b64 = base64.b64encode(content).decode()
+    # Reuse main endpoint logic via internal call
+    from routes.vision_routes import process_frame, FrameProcessRequest
+    req = FrameProcessRequest(
+        camera_id=camera_id,
+        image_b64=b64,
+        run_attributes=run_attributes,
+        run_reid=run_reid,
+    )
+    return await process_frame(req, db, pipeline, graph)
+
+
+# ── GET /cameras ──────────────────────────────────────────────────────────────
+
+@router.get("/cameras", summary="List active cameras and their status")
+async def list_cameras(pipeline=Depends(get_pipeline), graph=Depends(get_movement_graph)):
+    summary = graph.get_movement_summary()
+    trackers = list(pipeline.tracker_manager._trackers.keys())
+    fps_data = {cam: pipeline._compute_fps(cam) for cam in trackers}
+    return {
+        "active_cameras": trackers,
+        "fps_per_camera": fps_data,
+        "movement_graph_summary": summary,
+    }
+
+
+# ── WebSocket /live-feed ──────────────────────────────────────────────────────
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.active_connections.append(ws)
+        logger.info(f"WebSocket connected. Total: {len(self.active_connections)}")
+
+    def disconnect(self, ws: WebSocket):
+        self.active_connections.remove(ws)
+        logger.info(f"WebSocket disconnected. Total: {len(self.active_connections)}")
+
+    async def broadcast(self, data: dict):
+        import json
+        msg = json.dumps(data)
+        for conn in self.active_connections:
+            try:
+                await conn.send_text(msg)
+            except Exception:
+                pass
+
+
+ws_manager = ConnectionManager()
+
+
+@router.websocket("/live-feed")
+async def live_feed_websocket(websocket: WebSocket, pipeline=Depends(get_pipeline)):
+    """
+    WebSocket endpoint for realtime surveillance feed.
+    Client sends: {"camera_id": str, "image_b64": str}
+    Server broadcasts processed results to all connected clients.
+    """
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            camera_id = data.get("camera_id", "cam-0")
+            image_b64 = data.get("image_b64", "")
+            if not image_b64:
+                await websocket.send_json({"error": "No image provided"})
+                continue
+            result = pipeline.process_frame(
+                image_input=image_b64,
+                camera_id=camera_id,
+                run_attributes=data.get("run_attributes", False),
+                run_reid=data.get("run_reid", True),
+            )
+            await websocket.send_json(result)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)

@@ -1,0 +1,59 @@
+# ── Python ────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual Environments ───────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── AI Model Caches (LARGE — never commit) ────────────
+backend/model_cache/
+backend/faiss_indexes/
+model_cache/
+faiss_indexes/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.gguf
+
+# ── Database files ────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Logs / temp outputs ───────────────────────────────
+*.log
+backend/pip_out*.txt
+backend/pip_output*.txt
+backend/whisper_out*.txt
+
+# ── Environment secrets ───────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Node / Next.js ────────────────────────────────────
+node_modules/
+.next/
+frontend/.next/
+frontend/node_modules/
+frontend/build_output.txt
+out/
+build/
+
+# ── Editor / OS ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

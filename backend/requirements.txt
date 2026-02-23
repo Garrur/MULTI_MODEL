@@ -1,0 +1,96 @@
+# ============================================================
+# Multimodal Surveillance Intelligence System - Requirements
+# Python 3.10+
+# ============================================================
+
+# --- Core API Framework ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+websockets==12.0
+httpx==0.27.2
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# --- Database ---
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.35
+
+alembic==1.13.3
+psycopg2-binary==2.9.9
+
+# --- PyTorch (install separately for CUDA - see README) ---
+# torch==2.4.1+cu124
+# torchvision==0.19.1+cu124
+# torchaudio==0.19.1+cu124
+
+# --- HuggingFace Ecosystem ---
+transformers==4.45.0
+accelerate==0.34.2
+datasets==3.0.1
+tokenizers==0.20.0
+safetensors==0.4.5
+huggingface-hub==0.25.1
+sentence-transformers==3.1.1
+
+# --- Vision & Computer Vision ---
+Pillow==10.4.0
+opencv-python==4.10.0.84
+numpy==1.26.4
+scipy==1.14.1
+scikit-image==0.24.0
+torchvision
+timm
+
+# --- FAISS (install separately for GPU - see README) ---
+# faiss-gpu  -> pip install faiss-gpu  (CUDA)
+# faiss-cpu  -> pip install faiss-cpu  (CPU only)
+
+# --- Object Detection & Tracking ---
+# ByteTrack / DeepSORT dependencies
+filterpy==1.4.5
+lapx==0.5.9.post1
+
+# --- PyTorch Geometric (Graph Module) ---
+# Install separately:
+# pip install torch-geometric
+# pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.4.1+cu124.html
+torch-geometric==2.6.1
+
+# --- Audio Processing ---
+librosa==0.10.2
+soundfile==0.12.1
+pyaudio==0.2.14
+torchaudio
+openai-whisper
+
+# --- NLP & Text Processing ---
+nltk==3.9.1
+spacy==3.8.2
+tiktoken==0.7.0
+
+# --- Logging & Monitoring ---
+loguru==0.7.2
+prometheus-client==0.21.0
+rich==13.8.1
+
+# --- Utilities ---
+python-dotenv==1.0.1
+aiofiles==24.1.0
+anyio==4.6.2
+tenacity==9.0.0
+cachetools==5.5.0
+click==8.1.7
+tqdm==4.66.5
+psutil==6.0.0
+GPUtil==1.4.0
+PyYAML==6.0.2
+
+# --- Testing & Benchmarks ---
+pytest==8.3.3
+pytest-asyncio==0.24.0
+locust==2.31.8
+
+# --- Image & Annotation ---
+matplotlib==3.9.2
+seaborn==0.13.2
