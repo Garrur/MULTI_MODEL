@@ -1,193 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-// ── Cinematic Intro Boot Sequence ──────────────────────────────────
-function BootScreen({ onComplete }: { onComplete: () => void }) {
-  const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState(0);
-  const phases = [
-    "INITIALIZING SENTINEL CORE...",
-    "LOADING NEURAL SUBSYSTEMS...",
-    "CALIBRATING OPTICAL SENSORS...",
-    "ESTABLISHING SECURE UPLINK...",
-    "SYSTEM ONLINE",
-  ];
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      setProgress((p) => {
-        const next = p + 1.5;
-        if (next >= 100) {
-          clearInterval(t);
-          setTimeout(onComplete, 600);
-          return 100;
-        }
-        setPhase(Math.floor((next / 100) * (phases.length - 1)));
-        return next;
-      });
-    }, 25);
-    return () => clearInterval(t);
-  }, []);
-
-  return (
-    <div className="boot-screen">
-      {/* Particle grid lines */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage:
-            "linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-          pointerEvents: "none",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse at center, transparent 20%, var(--void) 80%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div style={{ position: "relative", textAlign: "center" }}>
-        <div className="boot-logo" style={{ marginBottom: "0.5rem" }}>
-          SENTINEL
-        </div>
-        <div
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "0.65rem",
-            color: "var(--text-secondary)",
-            letterSpacing: "0.4em",
-            marginBottom: "3rem",
-          }}
-        >
-          MULTIMODAL SURVEILLANCE INTELLIGENCE
-        </div>
-
-        <div className="boot-progress-track" style={{ marginBottom: "1rem" }}>
-          <div
-            className="boot-progress-fill"
-            style={{ width: `${progress}%`, transition: "width 0.05s linear" }}
-          />
-        </div>
-
-        <div className="boot-text holo-cursor">{phases[phase]}</div>
-      </div>
-    </div>
-  );
-}
-
-// ── Stat Block ─────────────────────────────────────────────────────
-function StatBlock({
-  label,
-  value,
-  sub,
-  accent = "cyan",
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  accent?: "cyan" | "red" | "amber" | "violet";
-}) {
-  const colors = {
-    cyan: "var(--cyan)",
-    red: "var(--alert-red)",
-    amber: "var(--alert-amber)",
-    violet: "var(--violet)",
-  };
-  const glows = {
-    cyan: "var(--glow-cyan)",
-    red: "var(--glow-red)",
-    amber: "var(--glow-amber)",
-    violet: "var(--glow-violet)",
-  };
-
-  return (
-    <div className="holo-panel holo-corners" style={{ padding: "1.25rem 1.5rem" }}>
-      <div
-        className="font-mono"
-        style={{
-          fontSize: "0.58rem",
-          color: "var(--text-dim)",
-          letterSpacing: "0.2em",
-          marginBottom: "0.75rem",
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        className="font-display"
-        style={{
-          fontSize: "2.4rem",
-          color: colors[accent],
-          textShadow: glows[accent],
-          lineHeight: 1,
-          fontWeight: 700,
-          letterSpacing: "0.05em",
-        }}
-      >
-        {value}
-      </div>
-      {sub && (
-        <div
-          className="font-mono"
-          style={{
-            fontSize: "0.6rem",
-            color: "var(--text-dim)",
-            marginTop: "0.5rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-          }}
-        >
-          {sub}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Telemetry Bar ──────────────────────────────────────────────────
-function TelBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = Math.min((value / max) * 100, 100);
-  return (
-    <div style={{ marginBottom: "1rem" }}>
-      <div
-        className="font-mono"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: "0.65rem",
-          color: "var(--text-secondary)",
-          marginBottom: "0.4rem",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-        }}
-      >
-        <span>{label}</span>
-        <span style={{ color: "var(--text-primary)" }}>
-          {typeof value === "number" ? value.toFixed(1) : value}
-        </span>
-      </div>
-      <div className="holo-bar-track">
-        <div
-          className="holo-bar-fill"
-          style={{
-            width: `${pct}%`,
-            background: `linear-gradient(90deg, transparent, ${color})`,
-            boxShadow: `0 0 8px ${color}`,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
+import Link from "next/link";
+import { Activity, ShieldAlert, Video, BrainCircuit, Search, Eye, Fingerprint, Lock, ChevronRight } from "lucide-react";
 
 // ── Custom Cursor ──────────────────────────────────────────────────
 function CustomCursor() {
@@ -249,428 +63,279 @@ function CustomCursor() {
   );
 }
 
-// ── Main Dashboard ─────────────────────────────────────────────────
-export default function DashboardPage() {
+// ── Cinematic Intro Boot Sequence ──────────────────────────────────
+function BootScreen({ onComplete }: { onComplete: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState(0);
+  const phases = [
+    "INITIALIZING SENTINEL CORE...",
+    "LOADING NEURAL SUBSYSTEMS...",
+    "CALIBRATING OPTICAL SENSORS...",
+    "ESTABLISHING SECURE UPLINK...",
+    "SYSTEM ONLINE",
+  ];
+
+  useEffect(() => {
+    const hasBooted = sessionStorage.getItem("sentinel_booted");
+    if (hasBooted) {
+      onComplete();
+      return;
+    }
+
+    const t = setInterval(() => {
+      setProgress((p) => {
+        const next = p + 1.5;
+        if (next >= 100) {
+          clearInterval(t);
+          sessionStorage.setItem("sentinel_booted", "true");
+          setTimeout(onComplete, 600);
+          return 100;
+        }
+        setPhase(Math.floor((next / 100) * (phases.length - 1)));
+        return next;
+      });
+    }, 25);
+    return () => clearInterval(t);
+  }, [onComplete]);
+
+  return (
+    <div className="boot-screen">
+      {/* Particle grid lines */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "radial-gradient(ellipse at center, transparent 20%, var(--void) 80%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div style={{ position: "relative", textAlign: "center", zIndex: 10 }}>
+        <div className="boot-logo" style={{ marginBottom: "0.5rem" }}>
+          SENTINEL
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.65rem",
+            color: "var(--text-secondary)",
+            letterSpacing: "0.4em",
+            marginBottom: "3rem",
+          }}
+        >
+          MULTIMODAL SURVEILLANCE INTELLIGENCE
+        </div>
+
+        <div className="boot-progress-track" style={{ marginBottom: "1rem" }}>
+          <div
+            className="boot-progress-fill"
+            style={{ width: `${progress}%`, transition: "width 0.05s linear" }}
+          />
+        </div>
+
+        <div className="boot-text holo-cursor">{phases[phase]}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Feature Card Component ─────────────────────────────────────────
+function FeatureCard({ icon: Icon, title, desc, delay = 0 }: { icon: any, title: string, desc: string, delay?: number }) {
+  return (
+    <div className="holo-panel holo-corners" style={{ 
+      padding: "2rem 1.5rem", 
+      display: "flex", 
+      flexDirection: "column", 
+      gap: "1rem",
+      animation: `scanline 8s linear infinite, glowPulse 4s ease-in-out infinite alternate`,
+      animationDelay: `${delay}s`,
+      position: "relative",
+      overflow: "hidden"
+    }}>
+      <div style={{
+        position: "absolute",
+        top: 0, left: 0, right: 0, height: "1px",
+        background: "linear-gradient(90deg, transparent, var(--cyan), transparent)",
+        opacity: 0.5
+      }} />
+      <Icon size={28} style={{ color: "var(--cyan)", filter: "drop-shadow(0 0 8px var(--cyan))" }} />
+      <h3 className="font-display" style={{ margin: 0, fontSize: "1.1rem", letterSpacing: "0.1em", color: "var(--text-primary)" }}>
+        {title}
+      </h3>
+      <p className="font-mono" style={{ margin: 0, fontSize: "0.75rem", lineHeight: 1.6, color: "var(--text-dim)" }}>
+        {desc}
+      </p>
+    </div>
+  );
+}
+
+// ── Landing Page ───────────────────────────────────────────────────
+export default function LandingPage() {
   const [booting, setBooting] = useState(true);
-  const [health, setHealth] = useState<any>(null);
-  const [persons, setPersons] = useState<any[]>([]);
-  const [anomalies, setAnomalies] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const t = setInterval(() => setTick((x) => x + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    if (booting) return;
-    const fetch_ = async () => {
-      try {
-        const [h, p, a] = await Promise.all([
-          fetch(`${API}/health`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetch(`${API}/api/v1/persons?limit=6`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetch(`${API}/api/v1/anomalies?threshold=0.5`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        ]);
-        if (h) setHealth(h);
-        if (p) setPersons(p.persons || []);
-        if (a) setAnomalies(a.anomalous_persons || []);
-      } catch {}
-      finally { setLoading(false); }
-    };
-    fetch_();
-    const t = setInterval(fetch_, 10000);
-    return () => clearInterval(t);
-  }, [booting]);
-
-  const modelsLoaded = health?.models_loaded
-    ? Object.values(health.models_loaded).filter(Boolean).length
-    : 0;
-  const totalModels = health?.models_loaded
-    ? Object.keys(health.models_loaded).length
-    : 0;
-
-  const now = new Date();
-  const timeStr = now.toISOString().split("T")[1].slice(0, 8);
 
   if (booting) {
     return <BootScreen onComplete={() => setBooting(false)} />;
   }
 
   return (
-    <>
+    <div style={{ minHeight: "100vh", position: "relative", overflowX: "hidden", paddingBottom: "6rem" }}>
       <CustomCursor />
 
-      {/* Alert perimeter when threats exist */}
-      {anomalies.length > 0 && <div className="alert-perimeter" />}
+      {/* Background Effects */}
+      <div style={{
+        position: "fixed", inset: 0, zIndex: -1,
+        backgroundImage: "linear-gradient(rgba(0,229,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.02) 1px, transparent 1px)",
+        backgroundSize: "64px 64px",
+      }} />
+      <div style={{
+        position: "fixed", inset: 0, zIndex: -1,
+        background: "radial-gradient(circle at 50% 30%, rgba(0,229,255,0.05) 0%, transparent 60%)",
+      }} />
 
-      {/* ── Header ───────────────────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: "2rem",
-          paddingBottom: "1rem",
-          borderBottom: "1px solid rgba(0,229,255,0.08)",
-        }}
-      >
-        <div>
-          <h1
-            className="font-display"
-            style={{
-              fontSize: "clamp(1.4rem, 3vw, 2.2rem)",
-              margin: 0,
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              color: "var(--text-primary)",
-            }}
-          >
-            GLOBAL{" "}
-            <span style={{ color: "var(--cyan)", textShadow: "var(--glow-cyan)" }}>
-              COMMAND
+      <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "4rem 2rem" }}>
+        
+        {/* Hero Section */}
+        <section style={{ textAlign: "center", marginBottom: "8rem", position: "relative" }}>
+          <div style={{ 
+            display: "inline-block", 
+            padding: "0.4rem 1rem", 
+            border: "1px solid var(--cyan-dim)", 
+            background: "rgba(0,229,255,0.05)",
+            borderRadius: "50px",
+            marginBottom: "2rem"
+          }}>
+            <span className="font-mono" style={{ fontSize: "0.6rem", color: "var(--cyan)", letterSpacing: "0.2em" }}>
+              SYSTEM VERSION 2.4.1 // UPLINK ESTABLISHED
             </span>
+          </div>
+          
+          <h1 className="font-display" style={{ 
+            fontSize: "clamp(3rem, 8vw, 6rem)", 
+            margin: "0 0 1rem 0", 
+            lineHeight: 1.1,
+            letterSpacing: "0.1em",
+            color: "#fff",
+            textShadow: "0 0 20px rgba(0,229,255,0.3)"
+          }}>
+            <span style={{ color: "var(--cyan)", textShadow: "var(--glow-cyan)" }}>SENTINEL</span>.AI
           </h1>
-          <p
-            className="font-mono"
-            style={{
-              fontSize: "0.65rem",
-              marginTop: "0.35rem",
-              color: "var(--text-dim)",
-              letterSpacing: "0.15em",
-            }}
-          >
-            // SENTINEL MULTIMODAL INTELLIGENCE — OVERVIEW
+          
+          <p className="font-mono" style={{ 
+            fontSize: "clamp(0.8rem, 2vw, 1rem)", 
+            color: "var(--text-secondary)", 
+            maxWidth: "700px", 
+            margin: "0 auto 3rem auto",
+            letterSpacing: "0.05em",
+            lineHeight: 1.6
+          }}>
+            Advanced multimodal surveillance intelligence. Harnessing neural networks for real-time threat detection, cross-camera identity tracking, and forensic analysis.
           </p>
-        </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
-          {/* Live clock */}
-          <div
-            className="font-mono"
-            style={{
-              fontSize: "0.7rem",
-              color: "var(--text-secondary)",
-              letterSpacing: "0.12em",
-              textAlign: "right",
-            }}
-          >
-            <div style={{ color: "var(--text-dim)", fontSize: "0.55rem" }}>UTC // LIVE</div>
-            <div style={{ color: "var(--cyan)", textShadow: "var(--glow-cyan)", fontSize: "1rem" }}>
-              {timeStr}
-            </div>
+          <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", flexWrap: "wrap" }}>
+            <Link href="/dashboard" className="holo-btn font-mono" style={{ 
+              display: "flex", alignItems: "center", gap: "0.5rem", 
+              fontSize: "0.8rem", padding: "1rem 2rem", background: "rgba(0,229,255,0.1)" 
+            }}>
+              <Activity size={16} />
+              INITIALIZE COMMAND
+            </Link>
+            
+            <Link href="/upload" className="holo-btn font-mono" style={{ 
+              display: "flex", alignItems: "center", gap: "0.5rem", 
+              fontSize: "0.8rem", padding: "1rem 2rem", borderColor: "var(--text-dim)", color: "var(--text-primary)"
+            }}>
+              <Search size={16} />
+              FORENSIC UPLOAD
+            </Link>
+          </div>
+        </section>
+
+        {/* Features Subsystem */}
+        <section style={{ marginBottom: "6rem" }}>
+          <div style={{ 
+            display: "flex", alignItems: "center", gap: "1rem", marginBottom: "3rem" 
+          }}>
+            <h2 className="font-display" style={{ fontSize: "1.5rem", margin: 0, letterSpacing: "0.15em", color: "var(--text-primary)" }}>
+              CORE SUBSYSTEMS
+            </h2>
+            <div style={{ flex: 1, height: "1px", background: "linear-gradient(90deg, var(--cyan-dim), transparent)" }} />
           </div>
 
-          {/* Connection status */}
-          <div
-            className="holo-panel"
-            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.8rem" }}
-          >
-            <div
-              className={`status-dot ${health?.status === "healthy" ? "status-dot-active" : "status-dot-offline"}`}
+          <div style={{ 
+            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1.5rem" 
+          }}>
+            <FeatureCard 
+              icon={Eye} 
+              title="OMNI-TRACKING" 
+              desc="Simultaneous tracking of hundreds of entities across dynamic environments using state-of-the-art ByteTrack algorithms."
+              delay={0}
             />
-            <span
-              className="font-mono"
-              style={{
-                fontSize: "0.65rem",
-                color: health?.status === "healthy" ? "var(--cyan)" : "var(--text-dim)",
-                letterSpacing: "0.1em",
-              }}
-            >
-              {health?.status === "healthy" ? "UPLINK_OK" : "SEARCHING…"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Stat Grid ────────────────────────────────────── */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "1rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <StatBlock
-          label="Targets Tracked"
-          value={persons.length.toString().padStart(3, "0")}
-          sub="Active identities"
-        />
-        <StatBlock
-          label="Neural Models"
-          value={loading ? "—" : `${modelsLoaded}/${totalModels}`}
-          sub="Subsystems online"
-          accent="violet"
-        />
-        <StatBlock
-          label="Threat Alerts"
-          value={anomalies.length.toString().padStart(2, "0")}
-          sub="Anomalies detected"
-          accent={anomalies.length > 0 ? "red" : "cyan"}
-        />
-        <StatBlock
-          label="Compute Node"
-          value={health?.device?.toUpperCase() || "—"}
-          sub={health?.gpu?.name || "Processing unit"}
-          accent="amber"
-        />
-      </div>
-
-      {/* ── Telemetry + Subsystems ────────────────────────── */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "1rem",
-          marginBottom: "1.5rem",
-        }}
-      >
-        {/* Telemetry */}
-        <div className="holo-panel holo-corners" style={{ padding: "1.5rem" }}>
-          <div className="holo-heading" style={{ marginBottom: "1.25rem" }}>
-            System Telemetry
-          </div>
-          <TelBar label="CPU_LOAD" value={health?.cpu_percent || 0} max={100} color="var(--alert-amber)" />
-          <TelBar label="MEM_ALLOC (MB)" value={health?.memory_mb || 0} max={8000} color="var(--cyan)" />
-          {health?.gpu && (
-            <TelBar
-              label="VRAM_ALLOC (MB)"
-              value={health.gpu.memory_allocated_mb || 0}
-              max={8000}
-              color="var(--alert-red)"
+            <FeatureCard 
+              icon={Fingerprint} 
+              title="CROSS-CAN RE-ID" 
+              desc="Persistent identity recognition across disparate camera feeds relying on deep Vision Transformer (ViT) embeddings and FAISS vector matching."
+              delay={0.2}
             />
-          )}
-          {!health && (
-            <p className="font-mono holo-cursor" style={{ fontSize: "0.75rem", color: "var(--alert-red)", marginTop: "1rem" }}>
-              ERR_CONNECTION_REFUSED
-            </p>
-          )}
-        </div>
-
-        {/* Subsystem status */}
-        <div className="holo-panel holo-corners" style={{ padding: "1.5rem" }}>
-          <div className="holo-heading" style={{ marginBottom: "1.25rem" }}>
-            Subsystem Status
+            <FeatureCard 
+              icon={BrainCircuit} 
+              title="SEMANTIC ANALYSIS" 
+              desc="Natural language interrogation of video feeds. Search for specific entities based on extracted attributes like clothing color and gender."
+              delay={0.4}
+            />
+            <FeatureCard 
+              icon={ShieldAlert} 
+              title="THREAT DETECTION" 
+              desc="Autonomous identification of loitering, trespassing, and anomalous behavior patterns with instantaneous alert dissemination."
+              delay={0.6}
+            />
+            <FeatureCard 
+              icon={Video} 
+              title="HOLOGRAPHIC SCRUBBER" 
+              desc="Visual timeline mapping of critical events and subject appearances within forensic video uploads for rapid incident review."
+              delay={0.8}
+            />
+            <FeatureCard 
+              icon={Lock} 
+              title="ENCRYPTED ARCHIVE" 
+              desc="Secure database persistence of historical analysis missions, preserving high-value metadata and telemetry for post-action reporting."
+              delay={1.0}
+            />
           </div>
-          {health?.models_loaded ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "0.65rem",
-              }}
-            >
-              {Object.entries(health.models_loaded).map(([name, loaded]) => (
-                <div
-                  key={name}
-                  className="font-mono"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    fontSize: "0.68rem",
-                    color: loaded ? "var(--text-primary)" : "var(--text-dim)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                  }}
-                >
-                  <div
-                    className={`status-dot ${loaded ? "status-dot-active" : "status-dot-offline"}`}
-                  />
-                  {name.replace(/_/g, " ")}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="font-mono holo-cursor" style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-              AWAITING_DATA…
-            </p>
-          )}
-        </div>
-      </div>
+        </section>
 
-      {/* ── Recent Identities ─────────────────────────────── */}
-      <div className="holo-panel" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
-        <div className="holo-heading" style={{ marginBottom: "1.25rem" }}>
-          Recent Identities
-        </div>
-        {loading ? (
-          <p className="font-mono holo-cursor" style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-            QUERYING_DB…
-          </p>
-        ) : persons.length === 0 ? (
-          <p className="font-mono" style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-            NO_RECORDS_FOUND
-          </p>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-              gap: "0.75rem",
-            }}
-          >
-            {persons.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "1rem",
-                  padding: "0.9rem 1rem",
-                  background: "rgba(0,229,255,0.02)",
-                  border: "var(--border-holo)",
-                  borderRadius: "3px",
-                  transition: "border-color 0.3s, background 0.3s",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(0,229,255,0.3)";
-                  (e.currentTarget as HTMLDivElement).style.background = "rgba(0,229,255,0.04)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(0,229,255,0.12)";
-                  (e.currentTarget as HTMLDivElement).style.background = "rgba(0,229,255,0.02)";
-                }}
-              >
-                {/* Avatar */}
-                <div
-                  className="font-display"
-                  style={{
-                    width: 36, height: 36,
-                    background: "rgba(0,229,255,0.06)",
-                    border: "1px solid var(--cyan-dim)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.8rem",
-                    color: "var(--cyan)",
-                    flexShrink: 0,
-                    borderRadius: "2px",
-                  }}
-                >
-                  {p.id.slice(0, 2).toUpperCase()}
-                </div>
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p
-                    className="font-mono"
-                    style={{
-                      color: "var(--cyan)",
-                      fontSize: "0.8rem",
-                      margin: 0,
-                      letterSpacing: "0.06em",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    ID-{p.id.slice(0, 12).toUpperCase()}
-                  </p>
-                  <p
-                    className="font-mono"
-                    style={{ fontSize: "0.6rem", color: "var(--text-dim)", marginTop: "3px" }}
-                  >
-                    FIRST_SEEN: {new Date(p.first_seen).toISOString().slice(0, 16)}Z
-                  </p>
-                </div>
-                {/* Attributes */}
-                <div className="font-mono" style={{ fontSize: "0.65rem", textAlign: "right", flexShrink: 0 }}>
-                  {p.attributes?.gender && (
-                    <div style={{ color: "var(--text-primary)", textTransform: "uppercase" }}>
-                      {p.attributes.gender}
-                    </div>
-                  )}
-                  {p.attributes?.color && (
-                    <div style={{ color: "var(--text-dim)", textTransform: "uppercase", marginTop: "2px" }}>
-                      {p.attributes.color}
-                    </div>
-                  )}
-                </div>
+        {/* Tech Stack Specs */}
+        <section className="holo-panel" style={{ padding: "3rem" }}>
+          <div className="font-mono" style={{ 
+            fontSize: "0.6rem", color: "var(--cyan)", letterSpacing: "0.2em", marginBottom: "1rem", textAlign: "center" 
+          }}>
+            TECHNICAL SPECIFICATIONS
+          </div>
+          <div style={{ 
+            display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "2rem", opacity: 0.7 
+          }}>
+            {["Next.js 15 Suite", "React 19 Core", "FastAPI Matrix", "PyTorch Neural Engine", "FAISS Vector Ops", "YOLOv8 & CLIP Models", "SQLite Databanks"].map((tech) => (
+              <div key={tech} className="font-mono" style={{ 
+                fontSize: "0.8rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "0.5rem" 
+              }}>
+                <ChevronRight size={14} style={{ color: "var(--cyan)" }} />
+                {tech}
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </section>
 
-      {/* ── Critical Alerts ───────────────────────────────── */}
-      {anomalies.length > 0 && (
-        <div
-          className="holo-panel holo-panel-alert"
-          style={{ padding: "1.5rem" }}
-        >
-          <div
-            className="holo-heading"
-            style={{
-              marginBottom: "1.25rem",
-              color: "var(--alert-red)",
-            }}
-          >
-            ⚠ Critical Alerts Active
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-              gap: "0.75rem",
-            }}
-          >
-            {anomalies.slice(0, 6).map((a, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "1rem 1.25rem",
-                  background: "rgba(255,23,68,0.04)",
-                  border: "1px solid rgba(255,23,68,0.25)",
-                  borderRadius: "3px",
-                }}
-              >
-                <div>
-                  <p
-                    className="font-mono"
-                    style={{
-                      fontSize: "0.78rem",
-                      margin: 0,
-                      color: "var(--alert-red)",
-                      textShadow: "0 0 10px rgba(255,23,68,0.5)",
-                      letterSpacing: "0.08em",
-                    }}
-                  >
-                    TARGET-{a.person_id?.slice(0, 12).toUpperCase()}
-                  </p>
-                  <p
-                    className="font-mono"
-                    style={{ fontSize: "0.65rem", margin: "4px 0 0 0", color: "var(--text-secondary)", textTransform: "uppercase" }}
-                  >
-                    {a.verdict} — {a.unique_cameras} CAMS
-                  </p>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <p
-                    className="font-display"
-                    style={{
-                      fontSize: "1.6rem",
-                      fontWeight: 700,
-                      margin: 0,
-                      lineHeight: 1,
-                      color: "var(--alert-red)",
-                      textShadow: "var(--glow-red)",
-                    }}
-                  >
-                    {(a.anomaly_score * 100).toFixed(0)}%
-                  </p>
-                  <p className="font-mono" style={{ fontSize: "0.55rem", margin: "2px 0 0 0", color: "var(--text-dim)" }}>
-                    THREAT SCORE
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
+      </main>
+    </div>
   );
 }

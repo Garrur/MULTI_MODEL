@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Search, Video, FileText, Settings, ShieldAlert, Upload, Archive } from "lucide-react";
+import { Activity, Search, Video, FileText, Settings, ShieldAlert, Upload, Archive, Home } from "lucide-react";
 
 const navItems = [
-  { name: "OVERVIEW",    href: "/",          icon: Activity },
+  { name: "HOME",        href: "/",           icon: Home },
+  { name: "OVERVIEW",    href: "/dashboard",  icon: Activity },
   { name: "LIVE FEED",   href: "/live",       icon: Video },
   { name: "SEARCH",      href: "/search",     icon: Search },
   { name: "UPLOAD",      href: "/upload",     icon: Upload },
