@@ -19,6 +19,8 @@ const navItems = [
 export default function HoloNav() {
   const pathname = usePathname();
 
+  if (pathname === "/") return null;
+
   return (
     <nav className="spatial-nav" aria-label="Primary navigation">
       {/* Brand mark left */}
