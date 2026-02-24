@@ -1,5 +1,8 @@
 # 🔴 Multimodal Surveillance Intelligence System
 
+[![Vercel Deployment](https://img.shields.io/badge/Vercel-Deployed-black.svg?logo=vercel)](https://multi-model-nu.vercel.app/)
+[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/utkarshluv/sentinel-api)
+
 > **Production-ready AI-powered surveillance platform** — FastAPI · PyTorch · HuggingFace · FAISS · PostgreSQL · Next.js 15
 
 ---
