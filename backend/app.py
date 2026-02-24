@@ -85,6 +85,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("🛑 Shutting down Surveillance System...")
+    from vision.stream_manager import stream_manager
+    stream_manager.shutdown()
 
 
 # ── FastAPI App ────────────────────────────────────────────────────────────────
@@ -135,9 +137,11 @@ async def log_requests(request: Request, call_next):
 
 from routes.vision_routes import router as vision_router
 from routes.nlp_routes import router as nlp_router
+from routes.stream_routes import router as stream_router
 
 app.include_router(vision_router)
 app.include_router(nlp_router)
+app.include_router(stream_router)
 
 # ── Static Files ───────────────────────────────────────────────────────────────
 

@@ -1,8 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/api/v1/live-feed";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// --- Types ---
 interface Detection {
   track_id: number; bbox: number[]; score: number; assigned_person_id: string;
   is_new_person: boolean;
@@ -14,224 +16,171 @@ interface FrameResult {
   fps: number; latency: { total_ms: number; detection_ms: number; tracking_ms: number };
 }
 
-export default function LivePage() {
-  const [connected, setConnected] = useState(false);
-  const [result, setResult] = useState<FrameResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [cameraId, setCameraId] = useState("CAM-ALPHA");
-  const [frameCount, setFrameCount] = useState(0);
+// --- Camera Node Component ---
+function CameraNode({ 
+  cameraId, 
+}: { 
+  cameraId: string, 
+}) {
+  const [source, setSource] = useState("");
+  const [active, setActive] = useState(false);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Check on mount if streams are active (for persistence across navigation)
+  useEffect(() => {
+    fetch(`${API}/api/v1/streams/`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.streams?.includes(cameraId)) setActive(true);
+      }).catch(e => console.error(e));
+  }, [cameraId]);
 
   const connect = async () => {
+    if (!source.trim()) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-      ws.onopen = () => {
-        setConnected(true); setError(null);
-        intervalRef.current = setInterval(() => captureAndSend(ws), 200);
-      };
-      ws.onmessage = (e) => {
-        const d = JSON.parse(e.data);
-        setResult(d); setFrameCount((c) => c + 1); drawDetections(d);
-      };
-      ws.onerror = () => setError("CONNECTION_FAILED — Is backend active?");
-      ws.onclose = () => { setConnected(false); cleanup(); };
-    } catch { setError("ERR_CAMERA_ACCESS_DENIED"); }
+      await fetch(`${API}/api/v1/streams/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ camera_id: cameraId, source })
+      });
+      setActive(true);
+    } catch (e) { console.error(e); }
   };
 
-  const captureAndSend = (ws: WebSocket) => {
-    const v = videoRef.current, c = canvasRef.current;
-    if (!v || !c || ws.readyState !== WebSocket.OPEN) return;
-    const ctx = c.getContext("2d"); if (!ctx) return;
-    c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
-    ctx.drawImage(v, 0, 0);
-    ctx.fillStyle = "rgba(0,10,20,0.1)"; ctx.fillRect(0, 0, c.width, c.height);
-    ws.send(JSON.stringify({ camera_id: cameraId, image_b64: c.toDataURL("image/jpeg", 0.7).split(",")[1], run_attributes: true, run_reid: true }));
+  const disconnect = async () => {
+    try {
+      await fetch(`${API}/api/v1/streams/${cameraId}`, { method: "DELETE" });
+      setActive(false);
+    } catch (e) { console.error(e); }
   };
 
-  const drawDetections = (data: FrameResult) => {
-    const c = canvasRef.current; if (!c) return;
-    const ctx = c.getContext("2d"); if (!ctx) return;
-    const v = videoRef.current;
-    if (v) ctx.drawImage(v, 0, 0, c.width, c.height);
+  return (
+    <div className="holo-panel holo-corners" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {/* Node Header */}
+      <div className="font-mono" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem 0.8rem", borderBottom: "var(--border-holo)", background: "rgba(0,229,255,0.02)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div className={`status-dot ${active ? "status-dot-active" : "status-dot-offline"}`} />
+          <span style={{ fontSize: "0.6rem", color: "var(--text-secondary)", letterSpacing: "0.1em" }}>
+            {cameraId} // M-JPEG_FEED
+          </span>
+        </div>
+        {active ? (
+          <button onClick={disconnect} style={{ background: "none", border: "none", color: "var(--alert-red)", fontSize: "0.55rem", cursor: "pointer", letterSpacing: "0.1em" }} className="holo-cursor">DISCONNECT</button>
+        ) : null}
+      </div>
 
-    // Cinematic color grade
-    ctx.fillStyle = "rgba(0,15,30,0.18)"; ctx.fillRect(0, 0, c.width, c.height);
+      {/* Node Body */}
+      <div className="cam-frame" style={{ flex: 1, position: "relative", minHeight: "200px" }}>
+        {active ? (
+          <img 
+            src={`${API}/api/v1/streams/feed/${cameraId}?t=${Date.now()}`} 
+            alt={`Stream ${cameraId}`} 
+            style={{ width: "100%", height: "100%", objectFit: "cover", filter: "contrast(1.08) brightness(0.92) saturate(0.85)" }} 
+          />
+        ) : (
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "1rem", gap: "1rem" }}>
+            <div className="font-mono" style={{ fontSize: "0.7rem", color: "var(--text-dim)", letterSpacing: "0.1em" }}>AWAITING_SIGNAL_INPUT</div>
+            <input 
+              type="text" 
+              placeholder="Source (e.g. '0' or 'rtsp://..')" 
+              value={source} 
+              onChange={(e) => setSource(e.target.value)}
+              className="holo-input" 
+              style={{ width: "80%", fontSize: "0.7rem", padding: "0.4rem" }} 
+            />
+            <button onClick={connect} className="holo-btn" style={{ fontSize: "0.65rem", padding: "0.4rem 1rem" }}>INITIALIZE_LINK</button>
+          </div>
+        )}
 
-    for (const p of data.persons) {
-      const [x1, y1, x2, y2] = p.bbox;
-      const isAlert = !p.is_new_person && (p.reid_matches?.[0]?.similarity || 0) > 0.85;
-      const cyan = "#00E5FF", red = "#FF1744", amber = "#FFB300";
-      const col = isAlert ? red : p.is_new_person ? amber : cyan;
+        {/* Scanning line & Corners */}
+        <div className="cam-scan-line" />
+        <div className="cam-corner cam-corner-tl" />
+        <div className="cam-corner cam-corner-tr" />
+        <div className="cam-corner cam-corner-bl" />
+        <div className="cam-corner cam-corner-br" />
+      </div>
+    </div>
+  );
+}
 
-      // Outer faint box
-      ctx.strokeStyle = col.replace(")", ", 0.2)").replace("rgb", "rgba");
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-      ctx.setLineDash([]);
+export default function LivePage() {
+  const [results, setResults] = useState<Record<string, FrameResult>>({});
+  
+  // Keep results refreshed via polling
+  useEffect(() => {
+    const fetchResults = async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/streams/results`);
+        if (res.ok) setResults(await res.json());
+      } catch (e) { }
+    };
+    const t = setInterval(fetchResults, 1000);
+    return () => clearInterval(t);
+  }, []);
 
-      // Corner brackets
-      const len = 14;
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 1.5;
-      ctx.shadowColor = col;
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1 + len); ctx.lineTo(x1, y1); ctx.lineTo(x1 + len, y1);
-      ctx.moveTo(x2 - len, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + len);
-      ctx.moveTo(x1, y2 - len); ctx.lineTo(x1, y2); ctx.lineTo(x1 + len, y2);
-      ctx.moveTo(x2 - len, y2); ctx.lineTo(x2, y2); ctx.lineTo(x2, y2 - len);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // Label
-      ctx.fillStyle = col;
-      ctx.fillRect(x1, y1 - 16, 130, 16);
-      ctx.fillStyle = "#000";
-      ctx.font = "bold 10px 'Share Tech Mono', monospace";
-      ctx.fillText(`TRK-${p.track_id}  ${(p.score * 100).toFixed(0)}%  ${isAlert ? "MATCH" : p.is_new_person ? "NEW" : "TRACK"}`, x1 + 3, y1 - 4);
-    }
-  };
-
-  const cleanup = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    wsRef.current = null;
-  };
-  const disconnect = () => { wsRef.current?.close(); cleanup(); setConnected(false); setResult(null); };
-  useEffect(() => () => cleanup(), []);
+  // Combine persons from all active cameras for the roster
+  const allPersons = Object.values(results).flatMap(r => r.persons || []);
 
   return (
     <>
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "1px solid rgba(0,229,255,0.08)" }}>
         <div>
           <h1 className="font-display" style={{ fontSize: "clamp(1.4rem, 3vw, 2.2rem)", margin: 0, textTransform: "uppercase", letterSpacing: "0.12em" }}>
-            VISUAL <span style={{ color: "var(--cyan)", textShadow: "var(--glow-cyan)" }}>FEED</span>
+            VISUAL <span style={{ color: "var(--cyan)", textShadow: "var(--glow-cyan)" }}>MATRIX</span>
           </h1>
           <p className="font-mono" style={{ fontSize: "0.65rem", marginTop: "0.35rem", color: "var(--text-dim)", letterSpacing: "0.15em" }}>
-            // OPTICAL_SENSOR_ARRAY — REALTIME INFERENCE
+            // TACTICAL_GRID_VIEW — MULTI_STREAM_SYNC
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-          <input
-            type="text" value={cameraId} onChange={(e) => setCameraId(e.target.value)}
-            className="holo-input" placeholder="SOURCE_ID"
-            style={{ width: 130, fontSize: "0.8rem", padding: "0.5rem 0.75rem" }}
-          />
-          {!connected ? (
-            <button onClick={connect} className="holo-btn">INITIALIZE_LINK</button>
-          ) : (
-            <button onClick={disconnect} className="holo-btn holo-btn-danger">SEVER_CONNECTION</button>
-          )}
+        <div>
+          <Link href="/live/local" className="holo-btn" style={{ fontSize: "0.75rem", padding: "0.5rem 1rem", borderColor: "var(--cyan-dim)", color: "var(--cyan)" }}>
+            LAUNCH_LOCAL_WEBCAM_UPLINK
+          </Link>
         </div>
       </div>
 
-      {error && (
-        <div className="holo-panel" style={{ padding: "0.75rem 1rem", border: "var(--border-alert)", marginBottom: "1rem", color: "var(--alert-red)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
-          ⚠ {error}
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr", gap: "1rem" }}>
-        {/* Main viewport */}
-        <div className="holo-panel holo-corners">
-          {/* HUD bar */}
-          <div
-            className="font-mono"
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.5rem 1rem", borderBottom: "var(--border-holo)", background: "rgba(0,229,255,0.02)" }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div className={`status-dot ${connected ? "status-dot-active" : "status-dot-offline"}`} />
-              <span style={{ fontSize: "0.65rem", color: "var(--text-secondary)", letterSpacing: "0.1em" }}>
-                {cameraId} // RAW_FEED
-              </span>
-            </div>
-            {result && (
-              <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.65rem" }}>
-                <span><span style={{ color: "var(--text-dim)" }}>FPS: </span><span style={{ color: "var(--alert-amber)" }}>{result.fps}</span></span>
-                <span><span style={{ color: "var(--text-dim)" }}>LAT: </span><span style={{ color: "var(--cyan)" }}>{result.latency.total_ms.toFixed(0)}ms</span></span>
-                <span><span style={{ color: "var(--text-dim)" }}>TGT: </span><span style={{ color: "var(--text-primary)" }}>{result.person_count}</span></span>
-                <span><span style={{ color: "var(--text-dim)" }}>FRMS: </span><span style={{ color: "var(--text-primary)" }}>{frameCount}</span></span>
-              </div>
-            )}
-          </div>
-
-          {/* Camera viewport */}
-          <div className="cam-frame" style={{ aspectRatio: "16/9" }}>
-            <video ref={videoRef} autoPlay muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0 }} />
-            <canvas ref={canvasRef} style={{ width: "100%", height: "100%", objectFit: "contain", filter: "contrast(1.08) brightness(0.92) saturate(0.85)" }} />
-
-            {/* Scanning line */}
-            <div className="cam-scan-line" />
-
-            {/* Corner overlays */}
-            <div className="cam-corner cam-corner-tl" />
-            <div className="cam-corner cam-corner-tr" />
-            <div className="cam-corner cam-corner-bl" />
-            <div className="cam-corner cam-corner-br" />
-
-            {/* Center crosshair */}
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 30, height: 30, border: "1px solid rgba(0,229,255,0.15)", borderRadius: "50%", pointerEvents: "none" }} />
-
-            {!connected && (
-              <div className="font-mono holo-cursor" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.9rem", color: "var(--text-dim)", letterSpacing: "0.1em" }}>
-                AWAITING_SIGNAL_INPUT
-              </div>
-            )}
-          </div>
+      <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr", gap: "1rem", height: "calc(100vh - 180px)" }}>
+        
+        {/* Camera Grid (2x2) */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: "1rem" }}>
+          <CameraNode cameraId="CAM-ALPHA" />
+          <CameraNode cameraId="CAM-BETA" />
+          <CameraNode cameraId="CAM-GAMMA" />
+          <CameraNode cameraId="CAM-DELTA" />
         </div>
 
-        {/* Target roster */}
-        <div className="holo-panel" style={{ padding: "1rem", display: "flex", flexDirection: "column" }}>
-          <div className="holo-heading" style={{ marginBottom: "1rem" }}>Target Roster</div>
+        {/* Target Roster Sidebar */}
+        <div className="holo-panel" style={{ padding: "1rem", display: "flex", flexDirection: "column", height: "100%" }}>
+          <div className="holo-heading" style={{ marginBottom: "1rem" }}>Global Roster</div>
+          <div className="font-mono" style={{ fontSize: "0.6rem", color: "var(--text-dim)", marginBottom: "1rem", borderBottom: "var(--border-holo)", paddingBottom: "0.5rem" }}>
+            TRACKING {allPersons.length} ACTIVE TARGETS
+          </div>
+
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {!result || result.persons.length === 0 ? (
-              <p className="font-mono" style={{ fontSize: "0.7rem", color: "var(--text-dim)" }}>
-                NO_TARGETS_IN_FRAME
-              </p>
-            ) : result.persons.map((p) => {
+            {allPersons.length === 0 ? (
+               <p className="font-mono" style={{ fontSize: "0.7rem", color: "var(--text-dim)" }}>NO_TARGETS</p>
+            ) : allPersons.map((p, i) => {
               const isAlert = (p.reid_matches?.[0]?.similarity || 0) > 0.85 && !p.is_new_person;
               const borderCol = isAlert ? "rgba(255,23,68,0.35)" : p.is_new_person ? "rgba(255,179,0,0.3)" : "var(--cyan-dim)";
               const accentCol = isAlert ? "var(--alert-red)" : p.is_new_person ? "var(--alert-amber)" : "var(--cyan)";
+              
               return (
-                <div key={p.track_id} style={{ border: `1px solid ${borderCol}`, background: "rgba(0,229,255,0.015)", padding: "0.65rem 0.75rem", borderRadius: "2px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}>
-                    <span className="font-mono" style={{ fontSize: "0.75rem", color: accentCol, letterSpacing: "0.04em" }}>TRK-{p.track_id}</span>
-                    <span className="holo-chip" style={{ color: accentCol, borderColor: accentCol, fontSize: "0.55rem" }}>
+                <div key={`${p.track_id}-${i}`} style={{ border: `1px solid ${borderCol}`, background: "rgba(0,229,255,0.015)", padding: "0.5rem", borderRadius: "2px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.2rem" }}>
+                    <span className="font-mono" style={{ fontSize: "0.65rem", color: accentCol }}>TRK-{p.track_id}</span>
+                    <span className="holo-chip" style={{ color: accentCol, borderColor: accentCol, fontSize: "0.5rem" }}>
                       {isAlert ? "MATCH" : p.is_new_person ? "NEW" : "TRACK"}
                     </span>
                   </div>
-                  <div className="font-mono" style={{ fontSize: "0.65rem", color: "var(--text-dim)", lineHeight: 1.7 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>CONF:</span><span style={{ color: "var(--text-primary)" }}>{(p.score * 100).toFixed(1)}%</span></div>
-                    {p.attributes?.gender && <div style={{ display: "flex", justifyContent: "space-between" }}><span>CLASS:</span><span style={{ color: "var(--text-primary)", textTransform: "uppercase" }}>{p.attributes.gender}</span></div>}
-                    {p.reid_matches?.[0] && <div style={{ display: "flex", justifyContent: "space-between" }}><span>REID:</span><span style={{ color: "var(--alert-amber)" }}>{(p.reid_matches[0].similarity * 100).toFixed(1)}%</span></div>}
+                  <div className="font-mono" style={{ fontSize: "0.6rem", color: "var(--text-dim)", lineHeight: 1.5 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>CONF:</span><span style={{color: "var(--text-primary)"}}>{(p.score * 100).toFixed(0)}%</span></div>
+                    {p.attributes?.gender && <div style={{ display: "flex", justifyContent: "space-between" }}><span>CLASS:</span><span style={{color: "var(--text-primary)"}}>{p.attributes.gender}</span></div>}
                   </div>
                 </div>
               );
             })}
           </div>
-
-          {/* Latency stats */}
-          {result && (
-            <div style={{ borderTop: "var(--border-holo)", paddingTop: "0.75rem", marginTop: "0.75rem" }}>
-              <div className="font-mono" style={{ fontSize: "0.58rem", color: "var(--text-dim)", lineHeight: 1.8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>DETECT:</span><span style={{ color: "var(--cyan)" }}>{result.latency.detection_ms.toFixed(0)}ms</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>TRACK:</span><span style={{ color: "var(--cyan)" }}>{result.latency.tracking_ms.toFixed(0)}ms</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>TOTAL:</span><span style={{ color: "var(--alert-amber)" }}>{result.latency.total_ms.toFixed(0)}ms</span></div>
-              </div>
-            </div>
-          )}
         </div>
+        
       </div>
     </>
   );

@@ -151,18 +151,32 @@ export default function AnomaliesPage() {
                     background: "rgba(0,0,0,0.2)",
                   }}
                 >
-                  <div>
-                    <div
-                      className="font-mono"
-                      style={{ fontSize: "0.65rem", color: "var(--text-dim)", letterSpacing: "0.08em", marginBottom: "4px" }}
-                    >
-                      TARGET_ID
+                  <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                    <div style={{
+                      width: "48px", height: "48px", borderRadius: "2px", border: `1px solid ${threat.border}`,
+                      overflow: "hidden", background: "rgba(0,229,255,0.05)",
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                    }}>
+                      <img 
+                        src={`${API}/static/thumbnails/${a.person_id}.jpg`} 
+                        alt="Target" 
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                        onError={(e) => { e.currentTarget.style.display = "none"; }} 
+                      />
                     </div>
-                    <div
-                      className="font-mono"
-                      style={{ fontSize: "0.82rem", color: threat.col, textShadow: threat.glow, letterSpacing: "0.06em" }}
-                    >
-                      {a.person_id?.slice(0, 16).toUpperCase()}...
+                    <div>
+                      <div
+                        className="font-mono"
+                        style={{ fontSize: "0.65rem", color: "var(--text-dim)", letterSpacing: "0.08em", marginBottom: "4px" }}
+                      >
+                        TARGET_ID
+                      </div>
+                      <div
+                        className="font-mono"
+                        style={{ fontSize: "0.82rem", color: threat.col, textShadow: threat.glow, letterSpacing: "0.06em" }}
+                      >
+                        {a.person_id?.slice(0, 16).toUpperCase()}...
+                      </div>
                     </div>
                   </div>
                   <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>

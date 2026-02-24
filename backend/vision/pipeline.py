@@ -135,6 +135,13 @@ class VisionPipeline:
                     person_entry["assigned_person_id"] = new_pid
                     person_entry["is_new_person"] = True
                     person_entry["faiss_id"] = faiss_id
+                    
+                    import os
+                    os.makedirs("static/thumbnails", exist_ok=True)
+                    try:
+                        crop.save(f"static/thumbnails/{new_pid}.jpg", "JPEG", quality=85)
+                    except Exception as e:
+                        logger.warning(f"Failed to save thumbnail for {new_pid}: {e}")
 
             # 4b. Attribute recognition
             if run_attributes:
