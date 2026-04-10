@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import HoloNav from "../components/HoloNav";
-import CustomCursor from "../components/CustomCursor";
 
 export const metadata: Metadata = {
   title: "SENTINEL // MULTIMODAL SURVEILLANCE AI",
@@ -28,8 +27,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Orbital bottom navigation instead of sidebar */}
         <HoloNav />
 
-        {/* Holographic custom cursor */}
-        <CustomCursor />
       </body>
     </html>
   );
